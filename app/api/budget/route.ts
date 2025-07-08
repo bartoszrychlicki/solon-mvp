@@ -1,28 +1,32 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = process.env.SUPABASE_URL!
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY!
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+import { NextResponse } from 'next/server';
+import { supabase } from '../../../lib/supabase';
 
 export async function GET() {
-  const { data, error } = await supabase
-    .from('limits')
-    .select('limit, used')
-    .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
-}
+  const userId = '00000000-0000-0000-0000-000000000000'; //  ← zastąp Clerk userId
 
-export async function POST(req: Request) {
-  const body = await req.json()
-  const { limit } = body
-  const { data, error } = await supabase
-    .from('limits')
-    .update({ limit })
-    .eq('id', 1)
-    .select()
-    .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  // 1) pobierz income & fixed
+  const { data: user } = await supabase
+    .from('users')
+    .select('monthly_net_income,fixed_costs')
+    .eq('id', userId)
+    .single();
+
+  // 2) wywołaj funkcję SQL
+  const { data: spend } = await supabase
+    .rpc('get_monthly_spend', { uid: userId })
+    .single();
+
+  // 3) oblicz free cash i limit dzienny
+  const daysInMonth   = new Date().daysInMonth ?? 30; // helper
+  const today         = new Date().getDate();
+  const daysPassed    = today;
+  const freeCashTotal = (user.monthly_net_income - user.fixed_costs) - spend;
+  const dailyLimit    = freeCashTotal > 0
+      ? freeCashTotal / (daysInMonth - daysPassed + 1)
+      : 0;
+
+  return NextResponse.json({
+    monthSpend: spend,
+    dailyLimit: Math.round(dailyLimit * 100) / 100
+  });
 }

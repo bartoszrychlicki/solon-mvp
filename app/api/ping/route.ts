@@ -4,8 +4,7 @@ import { supabase } from '../../../lib/supabase';
 export async function GET() {
   const { data, error } = await supabase
     .from('spends')
-    .select('id')
-    .limit(1);
+    .select('id');
 
   if (error) return NextResponse.json({ ok: false, error }, { status: 500 });
 
